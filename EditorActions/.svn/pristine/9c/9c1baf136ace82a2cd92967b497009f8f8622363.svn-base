@@ -1,0 +1,387 @@
+package editoractions;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.InputStream;
+import java.util.HashMap;
+
+import org.eclipse.core.filesystem.EFS;
+import org.eclipse.core.filesystem.IFileStore;
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IMarker;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.IWorkspace;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.text.TextSelection;
+import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.ui.IEditorInput;
+import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IFileEditorInput;
+import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchWindow;
+import org.eclipse.ui.PartInitException;
+import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.editors.text.TextEditor;
+import org.eclipse.ui.ide.FileStoreEditorInput;
+import org.eclipse.ui.texteditor.IDocumentProvider;
+import org.eclipse.ui.texteditor.ITextEditor;
+import org.eclipse.ui.texteditor.MarkerUtilities;
+
+import consoleActions.ConsoleActions;
+
+/*
+ * Useful to know about CurrentFileRealName:whoami.txt
+ * RealFilePath:/Users/josephreddington/Documents/junit-workspace/testProject/whoami.txt
+ * WorkingDirectory:/Users/josephreddington/Documents/junit-workspace/testProject In the sleep
+ * function
+ */
+
+public class EditorActions {
+
+  /**
+   * This returns the contents of the current editor tab, as a string If there is no editor
+   * currently open it TODO test for this
+   * 
+   * @return contents of the current editor as a string.
+   */
+  public static String EditorContents() {
+    String temp = "No String";
+    IEditorPart part = getEditor();
+    if (part instanceof ITextEditor) {
+      final ITextEditor editor = (ITextEditor) part;
+      IDocumentProvider prov = editor.getDocumentProvider();
+      IDocument doc = prov.getDocument(editor.getEditorInput());
+      temp = doc.get();
+      ConsoleActions.debug("string was:" + temp);
+    } else {
+      ConsoleActions.debug("Euston, we have a problem...");
+    }
+    ConsoleActions.debug("green");
+    return temp;// was return null;
+  }
+
+  /**
+   * @return
+   */
+  public static IEditorPart getEditor() {
+    IWorkbenchWindow activeWorkbenchWindow = getWorkBenchWindow();
+    IWorkbenchPage activePage = activeWorkbenchWindow.getActivePage();
+    IEditorPart part = activePage.getActiveEditor();
+    return part;
+  }
+
+
+  /**
+   * Returns the contents of the open tab of an editor passed to it - this is needed for various
+   * methods that might execute outside of the UI method if it is passed null it TODO test this
+   * 
+   * @param editor
+   * @return contents of the current editor as a string.
+   */
+  public static String EditorContents(TextEditor editor) {
+    IDocumentProvider prov = editor.getDocumentProvider();
+    IDocument doc = prov.getDocument(editor.getEditorInput());
+    return doc.get();
+  }
+
+  // TODO: this needs three test cases one where it's passed the default editor, one where it's
+  // passed a nondefault editor, and one where there is no editors alive.
+
+  /**
+   * TODO this is useful in more places in this class
+   * 
+   * @return
+   */
+  protected static IWorkbenchWindow getWorkBenchWindow() {
+    IWorkbenchWindow activeWorkbenchWindow = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+    if (null == activeWorkbenchWindow) {
+      System.err
+          .println("Null Pointer error of the type that suggests this hasn't been executed from a the right thread");
+      throw new NullPointerException();
+    }
+    return activeWorkbenchWindow;
+  }
+
+
+
+  /**
+   * Returns the file current viewed in the editor as an IFile Object
+   * 
+   * @return
+   */
+  public static IFile getFile() {
+    IFile file = null;
+    IWorkbenchWindow win = getWorkBenchWindow();
+    IWorkbenchPage page = win.getActivePage();
+    if (page != null) {
+      IEditorPart editor = page.getActiveEditor();
+      if (editor != null) {
+        IEditorInput input = editor.getEditorInput();
+
+        if (input instanceof IFileEditorInput) {
+          file = ((IFileEditorInput) input).getFile();
+        } else if (input instanceof FileStoreEditorInput) {
+          // What goes here?
+
+
+        }
+      }
+    }
+    if (file == null) {
+      throw new AssertionError("null file returned");
+    }
+    return file;
+  }
+
+  public static boolean areWeOnline() {
+    IFile file = null;
+    IWorkbenchWindow win = getWorkBenchWindow();
+    IWorkbenchPage page = win.getActivePage();
+    if (page != null) {
+      IEditorPart editor = page.getActiveEditor();
+      if (editor != null) {
+        IEditorInput input = editor.getEditorInput();
+        if (input instanceof IFileEditorInput) {
+          file = ((IFileEditorInput) input).getFile();
+        }
+      }
+    }
+    if (file == null) {
+      return false;
+    } else {
+      return true;
+    }
+    // got to be a better way - tried stackoverflow with no response
+    // http://stackoverflow.com/questions/11419929/eclipse-plugin-checking-that-the-interface-has-loaded
+  }
+
+  // TODO: write a seperate test suite for when we are not online.
+  // TODO: this test suite will also include the exception handleing for all of the
+  /**
+   * Changes the contents of the editor passed into it. TODO test what happens if passed an offset
+   * that is too low TODO test what happens if passed a null.
+   * 
+   * @param in The replacement string to display in the editor
+   * @param editor the editor to change
+   * @param correctionToOffset the change to the cursor position that should occur following the
+   *        change (if extra characters added at start of a file for example, the user would expect
+   *        the cursor to be in the same place relative to the code you were typing.
+   */
+  public static void setEditorContents(String in, TextEditor editor, final int correctionToOffset) {
+    IDocumentProvider prov = editor.getDocumentProvider();
+    IDocument doc = prov.getDocument(editor.getEditorInput());
+    int currentCursorPosition = getcursorPosition(editor);
+    ConsoleActions.debug("Current positions is:" + currentCursorPosition);
+    doc.set(in);
+    editor.getSelectionProvider().setSelection(
+        new OurSelectionProvider(correctionToOffset, currentCursorPosition));
+  }
+
+  public static int getcursorPosition(TextEditor editor) {
+    ISelection selection = editor.getSelectionProvider().getSelection();
+    ITextSelection its = (ITextSelection) selection;
+
+    return its.getOffset();
+  }
+
+  public static int getcursorLine(TextEditor editor) {
+    ISelection selection = editor.getSelectionProvider().getSelection();
+    ITextSelection its = (ITextSelection) selection;
+    return its.getStartLine();
+  }
+
+  /**
+   * Changes the contents of the editor currently open.. TODO test what happens if it is passed a
+   * null
+   * 
+   * @param in The replacement string to display in the editor
+   */
+  public static void setEditorContents(String in) {
+    IEditorPart part =
+        PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().getActiveEditor();
+    if (part instanceof ITextEditor) {
+      final ITextEditor editor = (ITextEditor) part;
+      IDocumentProvider prov = editor.getDocumentProvider();
+      IDocument doc = prov.getDocument(editor.getEditorInput());
+      doc.set(in);
+    }
+  }
+
+  // protected static void openExternalFileInEditor(String filename) {
+  // File file = new File(filename);
+  // IFileStore fileOnLocalDisk = EFS.getLocalFileSystem().getStore(file.toURI());
+  // FileStoreEditorInput editorInput = new FileStoreEditorInput(fileOnLocalDisk);
+  // IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+  // IWorkbenchPage page = window.getActivePage();
+  // try {
+  // page.openEditor(editorInput, "org.eclipse.ui.DefaultTextEditor");
+  // } catch (PartInitException e) {
+  // // TODO Auto-generated catch block
+  // e.printStackTrace();
+  // }
+  //
+  // }
+
+  /**
+   * Returns the currently selected text in the currently open editors what happens if there is no
+   * text selected.
+   * 
+   * @return the currently selected text in the currently open editors
+   */
+  public static String getCurrentSelection() {
+    IEditorPart part =
+        PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().getActiveEditor();
+    if (part instanceof ITextEditor) {
+      ISelection sel = ((ITextEditor) part).getSelectionProvider().getSelection();
+      if (sel instanceof TextSelection) {
+        ITextSelection textSel = (ITextSelection) sel;
+        return textSel.getText();
+      }
+    }
+    return "No string";// was return null;
+  }
+
+  /**
+   * Returns the name of the file currently in the editor, for example 'whoami.txt' or 'Hello.java'
+   * 
+   * @return the name of the file
+   */
+  public static String getCurrentFileRealName() {
+    String name =
+        PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage().getActiveEditor()
+            .getEditorInput().getName();
+    ConsoleActions.debug(name);
+    return name;
+
+  }
+
+  /**
+   * Returns the working directory for the file currently in the editor, so if the file path is
+   * '/Users/josephreddington/Documents/junit-workspace/testProject/whoami.txt ' then the working
+   * directory is '/Users/josephreddington/Documents /junit-workspace/testProject' (no slash)
+   * 
+   * @return the working directory as a string
+   */
+  public static String getCurrentFileWorkingDirectory() {
+    String temp = getCurrentFileRealPath();
+    return temp.substring(0, temp.lastIndexOf("/"));
+  }
+
+  public static IProject getCurrentProject() {
+    // TODO add the (if file null) part from below, but test first
+    return getFile().getProject();
+  }
+
+  /**
+   * Returns the absolute location of the file currently in the editor. For example
+   * '/Users/josephreddington/Documents/junit-workspace/testProject/whoami.txt
+   * 
+   * @return the absolute location of the file, as a string
+   */
+  public static String getCurrentFileRealPath() {
+    IFile file = getFile();
+    if (file != null) {
+
+      return file.getLocation().toOSString();
+    }
+    return null;
+  }
+
+  /**
+   * This is used to create files dirived from the orginal files.
+   * 
+   * @param file
+   * @param newContents
+   * @param newExtension
+   * @return
+   */
+  public static IFile dublicateFileWithNewExtension(IFile file, String newContents,
+      String newExtension) {
+    String projectName = getCurrentProject().getName();
+    String fullPath = file.getLocation().toOSString();
+    String pathFromProject =
+        fullPath.substring(fullPath.lastIndexOf(projectName) + projectName.length(),
+            fullPath.length());
+    String newFilePathFromProject =
+        pathFromProject.substring(0, pathFromProject.lastIndexOf(".")) + newExtension;
+    return createFile(newContents, newFilePathFromProject, projectName);
+  }
+
+  /**
+   * This creates a new file with the given contents and the particular path. TODO this
+   * automatically overwrites previous files - should make that at least optional.
+   * 
+   * @param contents the contents of the file.
+   * @param path the path WITHIN THE PROJECT that the file should sit at
+   * @param projectName the name of the containing project
+   */
+  // TODO this automatically overwrites previous files - should make that at
+  // least optional.
+  public static IFile createFile(String contents, String path, String projectName) {
+    System.out.println("createFile called with " + contents + " " + path + " " + projectName);
+    IWorkspace ws = ResourcesPlugin.getWorkspace();
+    IProject project = ws.getRoot().getProject(projectName);
+    System.out.println(project.getFullPath());
+    IFile file = project.getFile(path);
+    InputStream source = new ByteArrayInputStream(contents.getBytes());
+    try {
+      file.create(source, false, null);
+    } catch (CoreException e) {
+      try {
+        file.setContents(source, false, false, null);
+      } catch (CoreException e1) {
+        e1.printStackTrace();
+      }
+    }
+    return file;
+  }
+
+  public static void createMarkerForResource(int linenumber, String message) throws CoreException {
+    IResource resource = getFile();
+    createMarkerForResource(resource, linenumber, message);
+  }
+
+  public static void createMarkerForResource(IResource resource, int linenumber, String message)
+      throws CoreException {
+    // JR - test case with massive line number
+    if (resource != null) {
+      String temp = resource.getLocation().toOSString();
+      System.out.println("We are adding a marker to:" + temp);
+    }
+    HashMap<String, Integer> map = new HashMap<String, Integer>();
+    MarkerUtilities.setLineNumber(map, linenumber);
+    MarkerUtilities.setMessage(map, message);
+    map.put(IMarker.SEVERITY, IMarker.SEVERITY_WARNING);
+    MarkerUtilities.createMarker(resource, map, IMarker.PROBLEM);
+    System.out.println("This far");
+  }
+
+  public static void removeMarkerForResource(int i, String string) throws CoreException {
+    IResource resource = getFile();
+    // JR this is just wiping them all out - need to be a bit more
+    // selective.
+    IMarker[] markers = resource.findMarkers(null, true, IResource.DEPTH_INFINITE);
+    for (IMarker marker : markers) {
+      marker.delete();
+    } 
+
+  }
+
+  public static int getLineNumberForCharNumber(TextEditor editor, int target) {
+    String editorContents = EditorContents(editor);
+    String[] lines = editorContents.split("\\n");
+    int charsLeft = target;
+    for (int i = 0; i < lines.length; i++) {
+      if (charsLeft < lines[i].length()) {
+        return i;
+      }
+      charsLeft = charsLeft - lines[i].length();
+    }
+    return -1;// because there are more chars than lines to hold them..
+  }
+
+}
